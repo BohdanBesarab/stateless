@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Stateless.Reflection
 {
@@ -19,12 +20,12 @@ namespace Stateless.Reflection
         /// <summary>
         /// The name of the destination state
         /// </summary>
-        public string DestinationState { get; set; }
+        public string DestinationState { get; }
 
         /// <summary>
         /// The reason this destination state was chosen
         /// </summary>
-        public string Criterion { get; set; }
+        public string Criterion { get; }
     }
 
     /// <summary>
@@ -59,7 +60,7 @@ namespace Stateless.Reflection
     public class DynamicTransitionInfo : TransitionInfo
     {
         /// <summary>
-        /// Gets method informtion for the destination state selector.
+        /// Gets method information for the destination state selector.
         /// </summary>
         public InvocationInfo DestinationStateSelectorDescription { get; private set; }
 
@@ -80,15 +81,13 @@ namespace Stateless.Reflection
         public static DynamicTransitionInfo Create<TTrigger>(TTrigger trigger, IEnumerable<InvocationInfo> guards,
             InvocationInfo selector, DynamicStateInfos possibleStates)
         {
-            var transition = new DynamicTransitionInfo
+            return new DynamicTransitionInfo
             {
                 Trigger = new TriggerInfo(trigger),
-                GuardConditionsMethodDescriptions = guards ?? new List<InvocationInfo>(),
+                GuardConditionsMethodDescriptions = guards ?? Array.Empty<InvocationInfo>(),
                 DestinationStateSelectorDescription = selector,
                 PossibleDestinationStates = possibleStates // behaviour.PossibleDestinationStates?.Select(x => x.ToString()).ToArray()
             };
-
-            return transition;
         }
 
         private DynamicTransitionInfo() { }

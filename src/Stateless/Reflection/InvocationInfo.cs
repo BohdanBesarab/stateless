@@ -7,6 +7,8 @@ namespace Stateless.Reflection
     /// </summary>
     public class InvocationInfo
     {
+        private static readonly char[] methodNameChars = { '<', '>', '`' };
+
         readonly string _description;                     // _description can be null if user didn't specify a description
 
         /// <summary>
@@ -24,7 +26,7 @@ namespace Stateless.Reflection
 
         internal static InvocationInfo Create(Delegate method, string description, Timing timing = Timing.Synchronous)
         {
-            return new InvocationInfo(method?.TryGetMethodName(), description, timing);
+            return new InvocationInfo(method?.Method?.Name, description, timing);
         }
 
         /// <summary>
@@ -63,15 +65,17 @@ namespace Stateless.Reflection
             {
                 if (_description != null)
                     return _description;
-                if (MethodName.IndexOfAny(new char[] { '<', '>', '`' }) >= 0)
+                if (MethodName == null)
+                    return SpecialConstants.NullString;
+                if (MethodName.IndexOfAny(methodNameChars) >= 0)
                     return DefaultFunctionDescription;
-                return MethodName ?? "<null>";
+                return MethodName;
             }
         }
 
         /// <summary>
         /// Returns true if the method is invoked asynchronously.
         /// </summary>
-        public bool IsAsync => (_timing == Timing.Asynchronous);
+        public bool IsAsync => _timing == Timing.Asynchronous;
     }
 }

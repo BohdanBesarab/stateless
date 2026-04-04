@@ -14,14 +14,7 @@ namespace Stateless
             public abstract void Execute(Transition transition, object[] args);
             public abstract Task ExecuteAsync(Transition transition, object[] args);
 
-            public override bool ResultsInTransitionFrom(TState source, object[] args, out TState destination)
-            {
-                destination = source;
-                return false;
-            }
-
-
-            public class Sync: InternalTriggerBehaviour
+            public class Sync : InternalTriggerBehaviour
             {
                 public Action<Transition, object[]> InternalAction { get; }
 
@@ -29,6 +22,7 @@ namespace Stateless
                 {
                     InternalAction = internalAction;
                 }
+
                 public override void Execute(Transition transition, object[] args)
                 {
                     InternalAction(transition, args);
@@ -45,7 +39,13 @@ namespace Stateless
             {
                 readonly Func<Transition, object[], Task> InternalAction;
 
-                public Async(TTrigger trigger, Func<bool> guard,Func<Transition, object[], Task> internalAction, string guardDescription = null) : base(trigger, new TransitionGuard(guard, guardDescription))
+                public Async(TTrigger trigger, Func<object[], bool> guard, Func<Transition, object[], Task> internalAction, string guardDescription = null) : base(trigger, new TransitionGuard(guard, guardDescription))
+                {
+                    InternalAction = internalAction;
+                }
+
+                [Obsolete]
+                public Async(TTrigger trigger, Func<bool> guard, Func<Transition, object[], Task> internalAction, string guardDescription = null) : base(trigger, new TransitionGuard(guard, guardDescription))
                 {
                     InternalAction = internalAction;
                 }
@@ -61,10 +61,7 @@ namespace Stateless
                 {
                     return InternalAction(transition, args);
                 }
-
             }
-
-
         }
     }
 }

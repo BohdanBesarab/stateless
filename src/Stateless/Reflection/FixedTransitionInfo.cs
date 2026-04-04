@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.Linq;
 
 namespace Stateless.Reflection
@@ -10,15 +10,26 @@ namespace Stateless.Reflection
     {
         internal static FixedTransitionInfo Create<TState, TTrigger>(StateMachine<TState, TTrigger>.TriggerBehaviour behaviour, StateInfo destinationStateInfo)
         {
-            var transition = new FixedTransitionInfo
+            return new FixedTransitionInfo
             {
                 Trigger = new TriggerInfo(behaviour.Trigger),
                 DestinationState = destinationStateInfo,
-                GuardConditionsMethodDescriptions = (behaviour.Guard == null)
-                    ? new List<InvocationInfo>() : behaviour.Guard.Conditions.Select(c => c.MethodDescription)
+                GuardConditionsMethodDescriptions = behaviour.Guard == null
+                    ? Array.Empty<InvocationInfo>() : behaviour.Guard.Conditions.Select(c => c.MethodDescription),
+                IsInternalTransition = behaviour is StateMachine<TState, TTrigger>.InternalTriggerBehaviour
             };
+        }
 
-            return transition;
+        internal static FixedTransitionInfo Create<TState, TTrigger>(StateMachine<TState, TTrigger>.TriggerBehaviourAsync behaviour, StateInfo destinationStateInfo)
+        {
+            return new FixedTransitionInfo
+            {
+                Trigger = new TriggerInfo(behaviour.Trigger),
+                DestinationState = destinationStateInfo,
+                GuardConditionsMethodDescriptions = behaviour.Guard == null
+                    ? Array.Empty<InvocationInfo>() : behaviour.Guard.Conditions.Select(c => c.MethodDescription),
+                IsInternalTransition = behaviour is StateMachine<TState, TTrigger>.InternalTriggerBehaviour
+            };
         }
 
         private FixedTransitionInfo() { }

@@ -1,5 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using Stateless.Reflection;
 
 namespace Stateless.Graph
@@ -58,42 +61,41 @@ namespace Stateless.Graph
         /// <returns></returns>
         public string ToGraph(GraphStyleBase style)
         {
-            string dirgraphText = style.GetPrefix().Replace("\n", System.Environment.NewLine);
+            StringBuilder sb = new StringBuilder(style.GetPrefix());
 
             // Start with the clusters
             foreach (var state in States.Values.Where(x => x is SuperState))
             {
-                dirgraphText += style.FormatOneCluster((SuperState)state).Replace("\n", System.Environment.NewLine);
+                sb.Append(style.FormatOneCluster((SuperState)state));
             }
 
             // Next process all non-cluster states
             foreach (var state in States.Values)
             {
-                if ((state is SuperState) || (state is Decision) || (state.SuperState != null))
+                if (state is SuperState || state is Decision || state.SuperState != null)
                     continue;
-                dirgraphText += style.FormatOneState(state).Replace("\n", System.Environment.NewLine);
+
+                sb.Append(style.FormatOneState(state));
             }
 
             // Finally, add decision nodes
             foreach (var dec in Decisions)
             {
-                dirgraphText += style.FormatOneDecisionNode(dec.NodeName, dec.Method.Description)
-                    .Replace("\n", System.Environment.NewLine);
+                sb.Append(style.FormatOneDecisionNode(dec.NodeName, dec.Method.Description));
             }
 
             // now build behaviours
             List<string> transits = style.FormatAllTransitions(Transitions);
             foreach (var transit in transits)
-                dirgraphText += System.Environment.NewLine + transit;
+            {
+                sb.Append(Environment.NewLine);
+                sb.Append(transit);
+            }
 
             // Add initial transition if present
-            var initialStateName = initialState.UnderlyingState.ToString();
-            dirgraphText += System.Environment.NewLine + $" init [label=\"\", shape=point];";
-            dirgraphText += System.Environment.NewLine + $" init -> \"{initialStateName}\"[style = \"solid\"]";
+            sb.Append(style.GetInitialTransition(initialState));
 
-            dirgraphText += System.Environment.NewLine + "}";
-
-            return dirgraphText;
+            return sb.ToString();
         }
 
         /// <summary>
@@ -115,8 +117,8 @@ namespace Stateless.Graph
                         // Does it have any incoming transitions that specify that trigger?
                         foreach (var transit in state.Arriving)
                         {
-                            if ((transit.ExecuteEntryExitActions)
-                                && (transit.Trigger.UnderlyingTrigger.ToString() == entryAction.FromTrigger))
+                            if (transit.ExecuteEntryExitActions
+                                && transit.Trigger.UnderlyingTrigger.ToString() == entryAction.FromTrigger)
                             {
                                 transit.DestinationEntryActions.Add(entryAction);
                             }
@@ -141,10 +143,20 @@ namespace Stateless.Graph
                     State toState = States[fix.DestinationState.UnderlyingState.ToString()];
                     if (fromState == toState)
                     {
-                        StayTransition stay = new StayTransition(fromState, fix.Trigger, fix.GuardConditionsMethodDescriptions, true);
+                        StayTransition stay = new StayTransition(fromState, fix.Trigger, fix.GuardConditionsMethodDescriptions, !fix.IsInternalTransition);
                         Transitions.Add(stay);
                         fromState.Leaving.Add(stay);
                         fromState.Arriving.Add(stay);
+
+                        // If the reentrant transition causes the state's entry action to be executed, this is shown
+                        // explicity in the state graph by adding it to the DestinationEntryActions list.
+                        if (stay.ExecuteEntryExitActions)
+                        {
+                            foreach (var action in stateInfo.EntryActions.Where(a => a.FromTrigger is null))
+                            {
+                                stay.DestinationEntryActions.Add(action);
+                            }
+                        }
                     }
                     else
                     {
@@ -197,8 +209,9 @@ namespace Stateless.Graph
         {
             foreach (var stateInfo in machineInfo.States)
             {
-                if (!States.ContainsKey(stateInfo.UnderlyingState.ToString()))
-                    States[stateInfo.UnderlyingState.ToString()] = new State(stateInfo);
+                string underlyingState = stateInfo.UnderlyingState.ToString();
+                if (!States.ContainsKey(underlyingState))
+                    States[underlyingState] = new State(stateInfo);
             }
         }
 
@@ -208,7 +221,7 @@ namespace Stateless.Graph
         /// <param name="machineInfo"></param>
         void AddSuperstates(StateMachineInfo machineInfo)
         {
-            foreach (var stateInfo in machineInfo.States.Where(sc => (sc.Substates?.Count() > 0) && (sc.Superstate == null)))
+            foreach (var stateInfo in machineInfo.States.Where(sc => sc.Substates?.Count() > 0 && sc.Superstate == null))
             {
                 SuperState state = new SuperState(stateInfo);
                 States[stateInfo.UnderlyingState.ToString()] = state;
@@ -220,14 +233,15 @@ namespace Stateless.Graph
         {
             foreach (var subState in substates)
             {
-                if (States.ContainsKey(subState.UnderlyingState.ToString()))
+                string underlyingState = subState.UnderlyingState.ToString();
+                if (States.ContainsKey(underlyingState))
                 {
                     // This shouldn't happen
                 }
                 else if (subState.Substates.Any())
                 {
                     SuperState sub = new SuperState(subState);
-                    States[subState.UnderlyingState.ToString()] = sub;
+                    States[underlyingState] = sub;
                     superState.SubStates.Add(sub);
                     sub.SuperState = superState;
                     AddSubstates(sub, subState.Substates);
@@ -235,7 +249,7 @@ namespace Stateless.Graph
                 else
                 {
                     State sub = new State(subState);
-                    States[subState.UnderlyingState.ToString()] = sub;
+                    States[underlyingState] = sub;
                     superState.SubStates.Add(sub);
                     sub.SuperState = superState;
                 }

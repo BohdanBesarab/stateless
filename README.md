@@ -23,7 +23,7 @@ phoneCall.Fire(Trigger.CallDialled);
 Assert.AreEqual(State.Ringing, phoneCall.State);
 ```
 
-This project, as well as the example above, was inspired by [Simple State Machine](http://simplestatemachine.codeplex.com/).
+This project, as well as the example above, was inspired by [Simple State Machine (Archived)](https://web.archive.org/web/20170814020207/http://simplestatemachine.codeplex.com/).
 
 ## Features
 
@@ -41,6 +41,7 @@ Some useful extensions are also provided:
  * Parameterised triggers
  * Reentrant states
  * Export to DOT graph
+ * Export to mermaid graph
 
 ### Hierarchical States
 
@@ -66,7 +67,7 @@ Entry/Exit action handlers can be supplied with a parameter of type `Transition`
 
 ### Internal transitions
 
-Sometimes a trigger does needs to be handled, but the state shouldn't change. This is an internal transition. Use `InternalTransition` for this.
+Sometimes a trigger needs to be handled, but the state shouldn't change. This is an internal transition. Use `InternalTransition` for this.
 
 ### Initial state transitions
 
@@ -84,7 +85,7 @@ Due to Stateless' internal structure, it does not know when it is "started". Thi
 
 ```csharp
     sm.Configure(InitialState)
-        .OnActivate(() => sm.Fire(LetsGo)))
+        .OnActivate(() => sm.Fire(LetsGo))
         .Permit(LetsGo, StateA)
 ```
 
@@ -110,7 +111,7 @@ It might be necessary to perform some code before storing the object state, and 
 
 ### Introspection
 
-The state machine can provide a list of the triggers that can be successfully fired within the current state via the `StateMachine.PermittedTriggers` property. Use `StateMachine.GetInfo()` to retreive information about the state configuration.
+The state machine can provide a list of the triggers that can be successfully fired within the current state via the `StateMachine.PermittedTriggers` property. Use `StateMachine.GetInfo()` to retrieve information about the state configuration.
 
 ### Guard Clauses
 
@@ -122,9 +123,15 @@ phoneCall.Configure(State.OffHook)
     .PermitIf(Trigger.CallDialled, State.Beeping, () => !IsValidNumber);
 ```
 
+```csharp
+phoneCall.Configure(State.OffHook)
+    .PermitIfAsync(Trigger.CallDialled, State.Ringing, async () => await IsValidNumber())
+    .PermitIfAsync(Trigger.CallDialled, State.Beeping, async () => !await IsValidNumber());
+```
+
 Guard clauses within a state must be mutually exclusive (multiple guard clauses cannot be valid at the same time.) Substates can override transitions by respecifying them, however substates cannot disallow transitions that are allowed by the superstate.
 
-The guard clauses will be evaluated whenever a trigger is fired. Guards should therefor be made side effect free.
+The guard clauses will be evaluated whenever a trigger is fired. Guards should therefore be made side effect free.
 
 ### Parameterised Triggers
 
@@ -143,7 +150,7 @@ Trigger parameters can be used to dynamically select the destination state using
 
 ### Ignored Transitions and Reentrant States
 
-Firing a trigger that does not have an allowed transition associated with it will cause an exception to be thrown.
+In Stateless, firing a trigger that does not have an allowed transition associated with it will cause an exception to be thrown. This ensures that all transitions are explicitly defined, preventing unintended state changes.
 
 To ignore triggers within certain states, use the `Ignore(TTrigger)` directive:
 
@@ -152,11 +159,25 @@ phoneCall.Configure(State.Connected)
     .Ignore(Trigger.CallDialled);
 ```
 
-Alternatively, a state can be marked reentrant so its entry and exit actions will fire even when transitioning from/to itself:
+Alternatively, a state can be marked reentrant. A reentrant state is one that can transition back into itself. In such cases, the state's exit and entry actions will be executed, providing a way to handle events that require the state to reset or reinitialize.
 
 ```csharp
 stateMachine.Configure(State.Assigned)
     .PermitReentry(Trigger.Assigned)
+    .OnEntry(() => SendEmailToAssignee());
+```
+
+A state can also have a conditional reentrant, both synchronous and asynchronous.
+
+```csharp
+stateMachine.Configure(State.Assigned)
+    .PermitReentryIf(Trigger.Assigned, () => ShouldSendEmailAgain())
+    .OnEntry(() => SendEmailToAssignee());
+```
+
+```csharp
+stateMachine.Configure(State.Assigned)
+    .PermitReentryIfAsync(Trigger.Assigned, async () => await ShouldSendEmailAgain())
     .OnEntry(() => SendEmailToAssignee());
 ```
 
@@ -166,31 +187,94 @@ By default, triggers must be ignored explicitly. To override Stateless's default
 stateMachine.OnUnhandledTrigger((state, trigger) => { });
 ```
 
+### Dynamic State Transitions and State Re-entry
+
+Dynamic state transitions allow the destination state to be determined at runtime based on trigger parameters or other logic.
+
+```csharp
+stateMachine.Configure(State.Start)
+    .PermitDynamic(Trigger.CheckScore, () => score < 10 ? State.LowScore : State.HighScore);
+```
+
+When a dynamic transition results in the same state as the current state, it effectively becomes a reentrant transition, causing the state's exit and entry actions to execute. This can be useful for scenarios where the state needs to refresh or reset based on certain triggers.
+
+```csharp
+stateMachine.Configure(State.Waiting)
+    .OnEntry(() => Console.WriteLine($"Elapsed time: {elapsed} seconds..."))
+    .PermitDynamic(Trigger.CheckStatus, () => ready ? State.Done : State.Waiting);
+```
+
 ### State change notifications (events)
 
-Stateless supports 3 types of state machine events:
- * Internal state transition 
+Stateless supports 2 types of state machine events:
  * State transition
  * State machine transition completed
 
-#### Internal state transition 
-```csharp
-stateMachine.OnInternalTransitioned((state, trigger) => { });
-```
-
-This event will be invoked every time the state machine handles an internal state transition.
-
 #### State transition
 ```csharp
-stateMachine.OnTransitioned((state, trigger) => { });
+// Synchronously
+stateMachine.OnTransitioned((transition) => { });
+
+// Asynchronously
+stateMachine.OnTransitionedAsync((transition) => { return Task.FromResult(0); });
 ```
 This event will be invoked every time the state machine changes state.
 
 #### State machine transition completed
 ```csharp
-stateMachine.OnTransitionCompleted((state, trigger) => { });
+// Synchronously
+stateMachine.OnTransitionCompleted((transition) => { });
+
+// Asynchronously
+stateMachine.OnTransitionCompletedAsync((transition) => { return Task.FromResult(0); });
 ```
-This event will be invoked at the very end of the trigger handling, after the last  entry action have been executed.
+This event will be invoked at the very end of the trigger handling, after the last entry action has been executed.
+
+---
+
+In addition to this, Stateless also provides you with the ability to unregister from state machine events in 3 ways.
+ * State transition unregister (sync/async)
+ * State machine transition completed (sync/async)
+ * State machine unregister from all (sync and async)
+
+
+#### State machine transition unregister (synchronous)
+```csharp
+// Keep a reference to the synchronous callback action we want to unregister later.
+Action transitionCallbackAction = (transition) => { };
+stateMachine.OnTransitionedUnregister(transitionCallbackAction);
+```
+This method will unregister the specified action callback from the transition event.
+
+#### State machine transition unregister (asynchronous)
+```csharp
+// Keep a reference to the asynchronous callback function we want to unregister later.
+Func<Transition, Task> transitionAsyncCallback => (transition) => { return Task.FromResult(0); };
+stateMachine.OnTransitionedAsyncUnregister(transitionAsyncCallback);
+````
+This method will unregister the specified async function callback from the transition event.
+
+#### State machine transition completed unregister (synchronous)
+```csharp
+// Keep a reference to the synchronous callback action we want to unregister later.
+Action transitionCompletedCallbackAction = (transition) => { });
+stateMachine.OnTransitionCompletedUnregister(transitionCompletedCallbackAction);
+```
+This method will unregister the specified action callback from the transition completed event.
+
+#### State machine transition completed unregister (asynchronous)
+```csharp
+// Keep a reference to to the asynchronous callback function we want to unregister later.
+Func<Transition, Task> transitionCompletedAsyncCallback => (transition) => { return Task.FromResult(0); });
+stateMachine.OnTransitionCompletedAsyncUnregister(transitionCompletedAsyncCallback);
+```
+This method will unregister the specified async function callback from the transition completed event.
+
+#### Unregister all registered callbacks (sync and async)
+```csharp
+stateMachine.UnregisterAllCallbacks();
+```
+This method will unregister all synchronous and asynchronously registered callbacks from the state machine.
 
 ### Export to DOT graph
 
@@ -214,9 +298,36 @@ digraph {
 This can then be rendered by tools that support the DOT graph language, such as the [dot command line tool](http://www.graphviz.org/doc/info/command.html) from [graphviz.org](http://www.graphviz.org) or [viz.js](https://github.com/mdaines/viz.js). See http://www.webgraphviz.com for instant gratification.
 Command line example: `dot -T pdf -o phoneCall.pdf phoneCall.dot` to generate a PDF file.
 
+### Export to Mermaid graph
+
+Mermaid graphs can also be generated from state machines.
+ 
+```csharp
+phoneCall.Configure(State.OffHook)
+    .PermitIf(Trigger.CallDialled, State.Ringing);
+    
+string graph = MermaidGraph.Format(phoneCall.GetInfo());
+```
+
+The `MermaidGraph.Format()` method returns a string representation of the state machine in the [Mermaid](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams#creating-mermaid-diagrams), e.g.:
+
+```
+stateDiagram-v2
+     [*] --> OffHook
+    OffHook --> Ringing : CallDialled
+```
+
+This can be rendered by GitHub markdown or an engine such as [Obsidian](https://github.com/obsidianmd).
+
+``` mermaid
+stateDiagram-v2
+     [*] --> OffHook
+    OffHook --> Ringing : CallDialled
+```
+
 ### Async triggers
 
-On platforms that provide `Task<T>`, the `StateMachine` supports `async` entry/exit actions and so-on:
+On platforms that provide `Task<T>`, the `StateMachine` supports `async` entry/exit actions and so on:
 
 ```csharp
 stateMachine.Configure(State.Assigned)
@@ -233,17 +344,34 @@ await stateMachine.FireAsync(Trigger.Assigned);
 
 **Note:** while `StateMachine` may be used _asynchronously_, it remains single-threaded and may not be used _concurrently_ by multiple threads.
 
+## Advanced Features ##
+
+### Retaining the SynchronizationContext ###
+In specific situations where all handler methods must be invoked with the consumer's `SynchronizationContext`, set the `RetainSynchronizationContext` property on creation:
+
+```csharp
+var stateMachine = new StateMachine<State, Trigger>(initialState)
+{
+    RetainSynchronizationContext = true
+};
+```
+
+Setting this is vital within a Microsoft Orleans Grain for example, which requires the `SynchronizationContext` in order to make calls to other Grains.
+
 ## Building
 
-Stateless runs on .NET 4.0+ and practically all modern .NET platforms by targeting .NET Standard 1.0 and .NET Standard2.0. Visual Studio 2017 or later is required to build the solution.
+Stateless runs on .NET runtime version 4+ and practically all modern .NET platforms by targeting .NET Framework 4.6.2, .NET Standard 2.0, and .NET 8.0, 9.0 and 10.0. Visual Studio 2017 or later is required to build the solution.
+
+
+## Contributing
+
+We welcome contributions to this project. Check [CONTRIBUTING.md](CONTRIBUTING.md) for more info.
 
 
 ## Project Goals
 
 This page is an almost-complete description of Stateless, and its explicit aim is to remain minimal.
 
-Please use the issue tracker or the if you'd like to report problems or discuss features.
+Please use the issue tracker or the Discussions page if you'd like to report problems or discuss features.
 
 (_Why the name? Stateless implements the set of rules regarding state transitions, but, at least when the delegate version of the constructor is used, doesn't maintain any internal state itself._)
-
-[Visual Studio 2015 and .NET Core]: https://www.microsoft.com/net/core
