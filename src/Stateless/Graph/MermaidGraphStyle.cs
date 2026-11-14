@@ -124,12 +124,21 @@ namespace Stateless.Graph
             return $"\t{fromNodeName} --> {toNodeName} : {EscapeLabel(label)}";
         }
 
-        // A colon separates a node from its label, so a literal one in the label must be written as an entity code.
-        // A line break would end the label and let the rest start a new statement, and %% starts a comment, so
-        // line breaks become <br/> and percent signs become entity codes.
+        // Mermaid decodes #name; and #123; sequences in labels as entity codes, so '#' is escaped first; otherwise
+        // literal label text such as "#58;" would be decoded, and the codes added below would be escaped again.
+        // Mermaid passes label text through an HTML sanitiser, so '&', '<' and '>' become entity codes; this is done
+        // before line breaks are written as <br/>, Mermaid's line break token, so that the token itself is kept.
+        // A line break would otherwise end the label and let the rest start a new statement.
+        // A colon separates a node from its label, and %% starts a comment, so both are written as entity codes.
         private static string EscapeLabel(string label)
         {
-            return EscapeNewlines(label)
+            var escaped = label
+                .Replace("#", "#35;")
+                .Replace("&", "#amp;")
+                .Replace("<", "#lt;")
+                .Replace(">", "#gt;");
+
+            return EscapeNewlines(escaped)
                 .Replace(":", "#58;")
                 .Replace("%", "#37;");
         }

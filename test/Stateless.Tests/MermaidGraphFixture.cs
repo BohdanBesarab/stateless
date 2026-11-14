@@ -531,6 +531,55 @@ namespace Stateless.Tests
             Assert.Equal(expected, result);
         }
 
+        [Fact]
+        public void TransitionLabelsWithHtmlCharactersAreEscaped()
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine("	A --> B : Add#lt;List#lt;int#gt;#gt; [x #lt; 5 #amp;#amp; y #gt; 2]")
+                .AppendLine("[*] --> A")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<State, string>(State.A);
+
+            sm.Configure(State.A).PermitIf("Add<List<int>>", State.B, () => true, "x < 5 && y > 2");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void LiteralEntityCodesInLabelsAreNotDecoded()
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine("	A --> B : #35;58; #35;lt; #35;1 [#35;#35;]")
+                .AppendLine("[*] --> A")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<State, string>(State.A);
+
+            sm.Configure(State.A).PermitIf("#58; #lt; #1", State.B, () => true, "##");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void HtmlCharactersAndLineBreaksInLabels_KeepBreakTokens()
+        {
+            var sm = new StateMachine<State, string>(State.A);
+
+            sm.Configure(State.A).PermitIf("a<b\nc>d", State.B, () => true, "<br/>");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            // Only the real line break becomes a <br/> token; a literal "<br/>" in the input is escaped.
+            Assert.Contains("\tA --> B : a#lt;b<br/>c#gt;d [#lt;br/#gt;]", result);
+        }
+
         private static Stateless.Reflection.StateMachineInfo GetMachineWithLineBreaks()
         {
             var sm = new StateMachine<string, string>("A");
