@@ -419,11 +419,24 @@ namespace Stateless
                         HandleReentryTrigger(args, representativeState, transition);
                         break;
                     }
-                case DynamicTriggerBehaviourAsync _:
-                    // The destination selector is asynchronous, so the transition cannot complete before Fire() returns.
-                    throw new InvalidOperationException(
-                        $"Cannot execute asynchronous destination state selector for trigger '{trigger}' in state '{source}'. " +
-                         "Use asynchronous version of Fire [FireAsync]");
+                case DynamicTriggerBehaviourAsync asyncHandler:
+                    {
+                        var destinationTask = asyncHandler.GetDestinationState(source, args);
+
+                        // If the selector has not completed, the transition cannot finish before Fire() returns.
+                        if (!destinationTask.IsCompleted)
+                            throw new InvalidOperationException(
+                                $"Cannot execute asynchronous destination state selector for trigger '{trigger}' in state '{source}'. " +
+                                 "Use asynchronous version of Fire [FireAsync]");
+
+                        // Already completed: unwrap synchronously (rethrows the selector's exception if faulted).
+                        var destination = destinationTask.GetAwaiter().GetResult();
+                        // Handle transition, and set new state; reentry is permitted from dynamic trigger behaviours.
+                        var transition = new Transition(source, destination, trigger, args);
+                        HandleTransitioningTrigger(args, representativeState, transition);
+
+                        break;
+                    }
                 case DynamicTriggerBehaviour handler:
                     {
                         handler.GetDestinationState(source, args, out var destination);

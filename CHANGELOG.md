@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+### Fixed
+ - Synchronous `Fire` with an async dynamic destination selector (`PermitDynamicAsync`, `PermitDynamicIfAsync`) no longer fires and forgets the transition. If the selector has already completed, the transition completes before `Fire` returns. If it is still running, `Fire` throws `InvalidOperationException` (use `FireAsync`). Exceptions thrown by the selector now propagate to the caller [#658]
+ - `FireAsync` now uses an async handler whose guard passes when a sync handler for the same trigger has a failing guard. Unmet guard descriptions from both sync and async handlers are reported [#658]
+### Changed
+ - If a sync handler and an async handler for the same trigger both have passing guards, `FireAsync` now throws `InvalidOperationException` (multiple transitions permitted). Previously the sync handler was silently chosen [#658]
+
 ## 5.20.1 - 2025.11.16
 ### Added
  - Included dotnet 10 in targets [#636]
