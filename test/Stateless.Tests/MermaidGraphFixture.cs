@@ -442,7 +442,152 @@ namespace Stateless.Tests
 
             Assert.Equal(expected, result);
         }
-        
+
+        [Fact]
+        public void StateNameStartingWithHashIsAliased()
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine("\tA : #35;A")
+                .AppendLine("\tA --> B : go")
+                .AppendLine("[*] --> A")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<string, string>("#A");
+
+            sm.Configure("#A").Permit("go", "B");
+            sm.Configure("B");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Theory]
+        [InlineData("%", "#37;")]
+        [InlineData("%%", "#37;#37;")]
+        public void StateNameMadeOnlyOfSyntaxCharactersUsesNonEmptyAlias(string stateName, string escapedStateName)
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine($"\tStateAlias_1 : {escapedStateName}")
+                .AppendLine("\tStateAlias_1 --> StateAlias : go")
+                .AppendLine("[*] --> StateAlias_1")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<string, string>(stateName);
+
+            sm.Configure(stateName).Permit("go", "StateAlias");
+            sm.Configure("StateAlias");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void StateNameMadeOnlyOfSyntaxCharactersUsesFallbackAlias()
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine("\tStateAlias : #37;")
+                .AppendLine("\tStateAlias --> B : go")
+                .AppendLine("[*] --> StateAlias")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<string, string>("%");
+
+            sm.Configure("%").Permit("go", "B");
+            sm.Configure("B");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void StateNamesMadeOnlyOfSyntaxCharactersGetDistinctFallbackAliases()
+        {
+            var sm = new StateMachine<string, string>("%");
+
+            sm.Configure("%").Permit("go", "%%");
+            sm.Configure("%%");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Contains("\tStateAlias : #37;" + Environment.NewLine, result);
+            Assert.Contains("\tStateAlias_1 : #37;#37;", result);
+            Assert.Contains("\tStateAlias --> StateAlias_1 : go", result);
+        }
+
+        [Fact]
+        public void StateNameDifferingOnlyByHashDoesNotCollideWithExistingState()
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine("\tC_1 : C#35;")
+                .AppendLine("\tC_1 --> C : go")
+                .AppendLine("[*] --> C_1")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<string, string>("C#");
+
+            sm.Configure("C#").Permit("go", "C");
+            sm.Configure("C");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Theory]
+        [InlineData("a;b", "ab", "a#59;b")]
+        [InlineData("a{b}", "ab", "a{b}")]
+        [InlineData("a[1]", "a1", "a[1]")]
+        [InlineData("a\"b\"", "ab", "a\"b\"")]
+        [InlineData("a<b>", "ab", "a#lt;b#gt;")]
+        [InlineData("a&b", "ab", "a#amp;b")]
+        public void StateNamesWithOtherSyntaxCharactersAreAliased(string stateName, string alias, string escapedStateName)
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine($"\t{alias} : {escapedStateName}")
+                .AppendLine($"\t{alias} --> B : go")
+                .AppendLine($"[*] --> {alias}")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<string, string>(stateName);
+
+            sm.Configure(stateName).Permit("go", "B");
+            sm.Configure("B");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
+        [Theory]
+        [InlineData("sta#te", "state_1", "sta#35;te")]
+        [InlineData("class", "class_1", "class")]
+        public void StateNamesProducingReservedAliasesAreRenamed(string stateName, string alias, string escapedStateName)
+        {
+            var expected = new StringBuilder()
+                .AppendLine("stateDiagram-v2")
+                .AppendLine($"\t{alias} : {escapedStateName}")
+                .AppendLine($"\t{alias} --> B : go")
+                .AppendLine($"[*] --> {alias}")
+                .ToString().TrimEnd();
+
+            var sm = new StateMachine<string, string>(stateName);
+
+            sm.Configure(stateName).Permit("go", "B");
+            sm.Configure("B");
+
+            var result = Graph.MermaidGraph.Format(sm.GetInfo());
+
+            Assert.Equal(expected, result);
+        }
+
         [Fact]
         public void MermaidGraph_EscapesLabelsAndGuardDescriptions()
         {
@@ -554,7 +699,7 @@ namespace Stateless.Tests
         {
             var expected = new StringBuilder()
                 .AppendLine("stateDiagram-v2")
-                .AppendLine("	A --> B : #35;58; #35;lt; #35;1 [#35;#35;]")
+                .AppendLine("	A --> B : #35;58#59; #35;lt#59; #35;1 [#35;#35;]")
                 .AppendLine("[*] --> A")
                 .ToString().TrimEnd();
 
